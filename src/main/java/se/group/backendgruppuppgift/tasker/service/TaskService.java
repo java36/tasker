@@ -1,15 +1,17 @@
 package se.group.backendgruppuppgift.tasker.service;
 
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import se.group.backendgruppuppgift.tasker.model.Issue;
 import se.group.backendgruppuppgift.tasker.model.Task;
+import se.group.backendgruppuppgift.tasker.model.TaskStatus;
 import se.group.backendgruppuppgift.tasker.model.User;
 import se.group.backendgruppuppgift.tasker.repository.IssueRepository;
 import se.group.backendgruppuppgift.tasker.repository.TaskRepository;
 import se.group.backendgruppuppgift.tasker.repository.UserRepository;
 import se.group.backendgruppuppgift.tasker.service.exception.InvalidIssueException;
 import se.group.backendgruppuppgift.tasker.service.exception.InvalidTaskException;
-
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -41,11 +43,20 @@ public final class TaskService {
         return taskRepository.findById(id);
     }
 
-    public List<Task> findTasksByParams(String status, String team, String user, String text, String value) {
+    public List<Task> findTasksByParams(String status, String team, String user, String text, String value, String startDate, String endDate, int offset, int limit) {
         List<Task> result;
 
         if (!isBlank(status) && isAllBlank(team, user, text, value)) {
-            result = findTasksByStatus(status);
+            if (!isBlank(startDate) && !isBlank(endDate)) {
+                result = findTasksByStatus(status, startDate, endDate);
+            } else if(!isBlank(startDate) && isBlank(endDate)){
+                result = findTasksByStatus(status, startDate, LocalDate.now().toString());
+            } else if(isBlank(startDate) && !isBlank(endDate)){
+                throw new InvalidTaskException("No start date entered.");
+            } else{
+                result = findTasksByStatus(status);
+            }
+
         } else if (!isBlank(team) && isAllBlank(status, user, text, value)) {
             result = findByTeamId(team);
         } else if (!isBlank(user) && isAllBlank(status, team, text, value)) {
@@ -57,7 +68,7 @@ public final class TaskService {
         } else if (!isBlank(value) && value.equals("false") && isAllBlank(status, team, user, text)) {
             result = taskRepository.findByIssueNull();
         } else {
-            result = taskRepository.findAll();
+            result = taskRepository.findAll(PageRequest.of(offset, limit)).getContent();
         }
 
         return result;
@@ -69,11 +80,27 @@ public final class TaskService {
         if (taskResult.isPresent()) {
             Task updatedTask = taskResult.get();
 
-            if (!isBlank(task.getDescription()))
+            if (!isBlank(task.getDescription())) {
                 updatedTask.setDescription(task.getDescription());
+            }
 
-            if (!isBlank(task.getStatus().toString()))
+            if (!isBlank(task.getStatus().toString())) {
+                TaskStatus status = task.getStatus();
+
                 updatedTask.setStatus(task.getStatus());
+
+                switch (status) {
+                    case UNSTARTED:
+                        updatedTask.setUnstartedDate();
+                        break;
+                    case STARTED:
+                        updatedTask.setStartedDate();
+                        break;
+                    case DONE:
+                        updatedTask.setDoneDate();
+                        break;
+                }
+            }
 
             return Optional.ofNullable(taskRepository.save(updatedTask));
         }
@@ -92,6 +119,7 @@ public final class TaskService {
 
             updatedTask.setIssue(issueResult);
             updatedTask.setStatus(UNSTARTED);
+            updatedTask.setUnstartedDate();
             updatedTask = taskRepository.save(updatedTask);
 
             return Optional.ofNullable(updatedTask);
@@ -125,6 +153,43 @@ public final class TaskService {
             default:
                 return new ArrayList<>();
         }
+    }
+
+    private List<Task> findTasksByStatus(String status, String startDate, String endDate) {
+        status = prepareString(status);
+        LocalDate start = stringToDateConverter(startDate);
+        LocalDate end = stringToDateConverter(endDate);
+        List<Task> taskList;
+        List<Task> returnList = new ArrayList<>();
+
+        switch (status) {
+            case "started":
+                taskList = taskRepository.findByStatus(STARTED);
+                for(Task t : taskList){
+                    if(t.getStartedDate() != null && t.getStartedDate().isAfter(start) && t.getStartedDate().isBefore(end)){
+                        returnList.add(t);
+                    }
+                }
+                break;
+            case "unstarted":
+                taskList = taskRepository.findByStatus(UNSTARTED);
+                for(Task t : taskList){
+                    if(t.getUnstartedDate() != null && t.getUnstartedDate().isAfter(start) && t.getUnstartedDate().isBefore(end)){
+                        returnList.add(t);
+                    }
+                }
+                break;
+            case "done":
+                taskList = taskRepository.findByStatus(DONE);
+                for(Task t : taskList){
+                    if( t.getDoneDate() != null && t.getDoneDate().isAfter(start) && t.getDoneDate().isBefore(end)){
+                        returnList.add(t);
+                    }
+                }
+                break;
+        }
+
+        return returnList;
     }
 
     private String prepareString(String string) {
@@ -175,5 +240,14 @@ public final class TaskService {
         }
 
         return result;
+    }
+
+    private LocalDate stringToDateConverter(String string) {
+        if(string.matches("^[0-9]{4}-[0-9]{2}-[0-9]{2}")){
+            return LocalDate.parse(string);
+        }
+        else{
+            throw new InvalidTaskException(("Wrong date format. Date should correspond to yyyy-MM-dd"));
+        }
     }
 }
