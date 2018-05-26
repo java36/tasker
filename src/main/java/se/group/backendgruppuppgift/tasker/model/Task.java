@@ -1,6 +1,7 @@
 package se.group.backendgruppuppgift.tasker.model;
 
 import javax.persistence.*;
+import java.time.LocalDate;
 
 @Entity
 public final class Task {
@@ -15,6 +16,15 @@ public final class Task {
     @Enumerated(EnumType.STRING)
     private TaskStatus status;
 
+    @Column
+    private LocalDate unstartedDate;
+
+    @Column
+    private LocalDate startedDate;
+
+    @Column
+    private LocalDate doneDate;
+
     @ManyToOne
     private User user;
 
@@ -28,11 +38,24 @@ public final class Task {
     public Task(String description) {
         this.description = description;
         this.status = TaskStatus.UNSTARTED;
+        setUnstartedDate();
     }
 
     public Task(String description, TaskStatus status) {
         this.description = description;
         this.status = status;
+
+        switch(status){
+            case UNSTARTED:
+                setUnstartedDate();
+                break;
+            case STARTED:
+                setStartedDate();
+                break;
+            case DONE:
+                setDoneDate();
+                break;
+        }
     }
 
     public Long getId() {
@@ -70,6 +93,34 @@ public final class Task {
     public void setIssue(Issue issue) {
         this.issue = issue;
     }
+
+    public LocalDate getUnstartedDate() {
+        return unstartedDate;
+    }
+
+    public void setUnstartedDate() {
+        this.unstartedDate = LocalDate.now();
+        this.startedDate = null;
+        this.doneDate = null;
+    }
+
+    public LocalDate getStartedDate() {
+        return startedDate;
+    }
+
+    public void setStartedDate() {
+        this.startedDate = LocalDate.now();
+        this.doneDate = null;
+    }
+
+    public LocalDate getDoneDate() {
+        return doneDate;
+    }
+
+    public void setDoneDate() {
+        this.doneDate = LocalDate.now();
+    }
+
 
     @Override
     public String toString() {
