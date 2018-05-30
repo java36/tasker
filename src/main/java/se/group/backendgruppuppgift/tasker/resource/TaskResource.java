@@ -5,6 +5,7 @@ import se.group.backendgruppuppgift.tasker.model.Issue;
 import se.group.backendgruppuppgift.tasker.model.Task;
 import se.group.backendgruppuppgift.tasker.model.web.IssueWeb;
 import se.group.backendgruppuppgift.tasker.model.web.TaskWeb;
+import se.group.backendgruppuppgift.tasker.resource.filter.Secured;
 import se.group.backendgruppuppgift.tasker.service.TaskService;
 
 import javax.ws.rs.*;
@@ -27,16 +28,22 @@ public final class TaskResource {
     @Context
     private UriInfo uriInfo;
 
+    @Context
+    private BroadcasterResource broadcasterResource;
+
     private final TaskService taskService;
 
     public TaskResource(TaskService taskService) {
         this.taskService = taskService;
     }
 
+    @Secured
     @POST
     public Response createTask(TaskWeb taskWeb) {
         Task result = taskService.createTask(convertToTask(taskWeb));
         TaskWeb webResult = convertToTaskWeb(result);
+
+        broadcasterResource.broadcastMessage(result.getDescription());
 
         return Response.created(URI.create(uriInfo
                 .getAbsolutePathBuilder()
@@ -60,10 +67,14 @@ public final class TaskResource {
             @QueryParam("team") String team,
             @QueryParam("user") String user,
             @QueryParam("text") String text,
-            @QueryParam("issue") String value) {
+            @QueryParam("issue") String value,
+            @QueryParam("startDate") String startDate,
+            @QueryParam("endDate") String endDate,
+            @QueryParam("offset") @DefaultValue("0") int offset,
+            @QueryParam("limit") @DefaultValue("5") int limit) {
 
         List<TaskWeb> result = new ArrayList<>();
-        taskService.findTasksByParams(status, team, user, text, value)
+        taskService.findTasksByParams(status, team, user, text, value, startDate, endDate, offset, limit)
                 .forEach(t -> result.add(convertToTaskWeb(t)));
 
         return result;
